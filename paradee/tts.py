@@ -4,8 +4,7 @@ import numpy as np
 import onnxruntime as ort
 from huggingface_hub import hf_hub_download
 
-REPO = "sahilmahendrakar/Paradee-8M-v1.0"
-REVISION = "v1.0"
+REPOS = {"1.1": "sahilmahendrakar/Paradee-8M-v1.1", "1.0": "sahilmahendrakar/Paradee-8M-v1.0"}
 SAMPLE_RATE = 24000
 MAX_PHONEMES = 510   # the text side has 512 positions, two of which are the pad tokens at each end
 
@@ -13,15 +12,17 @@ MAX_PHONEMES = 510   # the text side has 512 positions, two of which are the pad
 class Paradee:
     """Load once, then call with text to get a float32 waveform at 24 kHz.
 
-    quantized: use the 9 MB int8 file (default) instead of the 37 MB fp32 one. They sound the same.
+    version: "1.1" (default) or "1.0", the earlier release with the slower decoder.
+    quantized: use the 8.5 MB int8 file (default) instead of the 35 MB fp32 one. They sound the same.
     model_path / config_path: local files instead of downloading from the Hugging Face Hub.
-    threads: CPU threads for onnxruntime. One thread already runs about 20x faster than real time.
+    threads: CPU threads for onnxruntime. One thread already runs about 60x faster than real time.
     """
 
-    def __init__(self, quantized=True, model_path=None, config_path=None, threads=1):
+    def __init__(self, version="1.1", quantized=True, model_path=None, config_path=None, threads=1):
+        repo, revision = REPOS[version], f"v{version}"
         name = "onnx/paradee_int8.onnx" if quantized else "onnx/paradee.onnx"
-        model_path = model_path or hf_hub_download(REPO, name, revision=REVISION)
-        config_path = config_path or hf_hub_download(REPO, "config.json", revision=REVISION)
+        model_path = model_path or hf_hub_download(repo, name, revision=revision)
+        config_path = config_path or hf_hub_download(repo, "config.json", revision=revision)
         self.vocab = json.load(open(config_path, encoding="utf-8"))["vocab"]
         so = ort.SessionOptions()
         so.intra_op_num_threads = threads

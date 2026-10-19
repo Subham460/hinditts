@@ -2,4 +2,4 @@
 from .tts import Paradee, SAMPLE_RATE
 
 __all__ = ["Paradee", "SAMPLE_RATE"]
-__version__ = "1.0.0"
+__version__ = "1.1.0"
