@@ -8,6 +8,8 @@ sys.path.insert(0, "scripts")
 from student_decoder import StudentDecoder
 from student import alignment
 from common import cpu_source_stft
+from lang import VOICE, STYLE_INDEX_MAX, DEVICE
+from dataio import load_shard
 ap = argparse.ArgumentParser(); ap.add_argument("preset"); ap.add_argument("--steps", type=int, default=50000)
 ap.add_argument("--bs", type=int, default=16); ap.add_argument("--lr", type=float, default=2e-4); ap.add_argument("--seg", type=int, default=64)
 ap.add_argument("--gan", action="store_true", help="add MPD+MRD adversarial and feature-matching losses")
@@ -23,7 +25,7 @@ ap.add_argument("--hf-weight", type=float, default=0.0, help="band-limited (1.5-
 ap.add_argument("--src-bands", action="store_true", help="feed every harmonic's phase as its own (cos, sin) channel pair to each generator stage (zero-init)")
 ap.add_argument("--full-phase", action="store_true", help="add an unbounded, zero-init phase term to the head's sin(x) phase (which spans only +-1 rad)")
 ap.add_argument("--utmos", action="store_true", help="score held-out audio with UTMOS at every EVAL")
-ap.add_argument("--eval-only", action="store_true"); ap.add_argument("--device", default="mps"); ap.add_argument("--profile", action="store_true"); ap.add_argument("--shards", type=int, default=999); ap.add_argument("--tag", default="")
+ap.add_argument("--eval-only", action="store_true"); ap.add_argument("--device", default=DEVICE); ap.add_argument("--profile", action="store_true"); ap.add_argument("--shards", type=int, default=999); ap.add_argument("--tag", default="")
 A = ap.parse_args(); DEV = A.device; RUN = f"checkpoints/dec_{A.preset}{A.tag}"; os.makedirs(RUN, exist_ok=True)
 HEAD = A.head_weight > 0 or A.phase_weight > 0
 if HEAD: assert A.matched_source, "--head-weight/--phase-weight need --matched-source"
@@ -34,7 +36,7 @@ def load_rows():
         for k in ("audio_mps", "d", "dur", "ids"): r.pop(k, None)
         return r
     def load(sh):
-        rows = torch.load(sh)
+        rows = load_shard(sh)
         for i, r in enumerate(rows): r["seed"] = i
         return [lean(r) for r in rows]
     rows0 = load(shards[0])
@@ -52,7 +54,7 @@ def segment(r, seg):
     src = matched_source(r, a, seg) if A.matched_source else torch.zeros(1)
     if A.matched_source and len(src) < 600 * seg: src = F.pad(src, (0, 600 * seg - len(src)))
     return asr[:, a:a + seg], F0[2 * a:2 * (a + seg)], N[2 * a:2 * (a + seg)], au[600 * a:600 * (a + seg)], src, style(r)
-def style(r): return REF[len(r["ps"]) - 1][0, :128] if HEAD else torch.zeros(1)   # teacher's per-length af_heart style (decoder half)
+def style(r): return REF[min(len(r["ps"]) - 1, STYLE_INDEX_MAX)][0, :128] if HEAD else torch.zeros(1)   # teacher's per-length voice style (decoder half)
 def collate(rows, seg):
     x = [segment(r, seg) for r in rows]
     return [torch.stack([t[i] for t in x]).to(DEV) for i in range(6)]
@@ -86,7 +88,7 @@ if A.matched_source:
     for q in model.generator.m_source.parameters(): q.requires_grad_(False)
     FIXED = FixedSource(); model.generator.m_source = FIXED
     if HEAD:  # frozen teacher decoder on the same excitation; hooks capture both conv_post outputs (pre exp/sin)
-        REF = _p.load_voice("af_heart"); TEACHER_DEC = _t.decoder.to(DEV).eval().requires_grad_(False); cpu_source_stft(TEACHER_DEC)
+        REF = _p.load_voice(VOICE); TEACHER_DEC = _t.decoder.to(DEV).eval().requires_grad_(False); cpu_source_stft(TEACHER_DEC)
         TEACHER_DEC.generator.m_source = FIXED; CAP = {}
         TEACHER_DEC.generator.conv_post.register_forward_hook(lambda m, i, o: CAP.__setitem__("t", o))
         model.generator.conv_post.register_forward_hook(lambda m, i, o: CAP.__setitem__("s", o))

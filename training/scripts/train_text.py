@@ -6,9 +6,11 @@ warnings.filterwarnings("ignore")
 import torch, torch.nn.functional as F, numpy as np, soundfile as sf
 sys.path.insert(0, "scripts")
 from student import TextStudent, alignment
+from lang import VOICE, STYLE_INDEX_MAX, DEVICE
+from dataio import load_shard
 ap = argparse.ArgumentParser(); ap.add_argument("preset"); ap.add_argument("--steps", type=int, default=20000)
 ap.add_argument("--bs", type=int, default=32); ap.add_argument("--lr", type=float, default=5e-4)
-ap.add_argument("--eval-only", action="store_true"); ap.add_argument("--device", default="mps")
+ap.add_argument("--eval-only", action="store_true"); ap.add_argument("--device", default=DEVICE)
 ap.add_argument("--shards", type=int, default=999); ap.add_argument("--tag", default="")
 ap.add_argument("--through-decoder", action="store_true", help="add a log-mel loss through the frozen teacher decoder on a random segment")
 ap.add_argument("--td-bs", type=int, default=8); ap.add_argument("--seg", type=int, default=48); ap.add_argument("--td-weight", type=float, default=1.0)
@@ -25,9 +27,9 @@ def load_rows():
         r.pop("audio_mps", None); r.pop("d", None)
         if train and not A.through_decoder: r.pop("audio", None)
         return r
-    rows0 = torch.load(shards[0])
+    rows0 = load_shard(shards[0])
     held = [lean(r, False) for r in rows0[:200]]
-    train = [lean(r, True) for r in rows0[200:]] + [lean(r, True) for sh in shards[1:] for r in torch.load(sh)]
+    train = [lean(r, True) for r in rows0[200:]] + [lean(r, True) for sh in shards[1:] for r in load_shard(sh)]
     return held, train, len(shards)
 held, train, nsh = load_rows()
 print(f"{len(train)} train / {len(held)} held-out sentences from {nsh} shards", flush=True)
@@ -62,7 +64,7 @@ def losses(model, batch):
         if not ok[i]: continue
         a = int(win[i]); sl = aln[i][:, a:a + A.seg]
         asr_seg = (pasr[i] @ sl)[None]; F0_seg = pF0[i:i + 1, 2 * a:2 * (a + A.seg)]; N_seg = pN[i:i + 1, 2 * a:2 * (a + A.seg)]
-        sty = TD_REF[int(L[i]) - 3].to(DEV)[:, :128]
+        sty = TD_REF[min(int(L[i]) - 3, STYLE_INDEX_MAX)].to(DEV)[:, :128]
         y = TD_DEC(asr_seg, F0_seg, N_seg, sty).squeeze(1)
         k = min(y.shape[-1], aud.shape[-1])
         l_td = l_td + F.l1_loss(torch.log(TD_MEL(y[:, :k]).clamp_min(1e-5)), torch.log(TD_MEL(aud[i:i + 1, :k]).clamp_min(1e-5))); n += 1
@@ -72,7 +74,7 @@ model = TextStudent(A.preset).to(DEV)
 if A.through_decoder:
     import torchaudio
     from common import load_teacher, cpu_source_stft
-    _pipe, _teacher, _ = load_teacher(device=DEV, fuse=False); TD_REF = _pipe.load_voice("af_heart")
+    _pipe, _teacher, _ = load_teacher(device=DEV, fuse=False); TD_REF = _pipe.load_voice(VOICE)
     if A.through_student_decoder:
         from student_decoder import StudentDecoder
         _sd = StudentDecoder(A.dec_preset).to(DEV); _sd.load_state_dict(torch.load(A.through_student_decoder, map_location=DEV)["model"])
@@ -98,14 +100,14 @@ def evaluate(n_audio=8, save=False):
         ls = np.array([l.item() for l in losses(model, collate(held[i:i + 32]))]); acc = ls if acc is None else acc + ls; nb += 1
     acc /= nb
     from common import load_teacher, compare, cpu_source_stft
-    pipe, teacher, _ = load_teacher(device=DEV, fuse=False); ref = pipe.load_voice("af_heart"); cpu_source_stft(teacher.decoder)
+    pipe, teacher, _ = load_teacher(device=DEV, fuse=False); ref = pipe.load_voice(VOICE); cpu_source_stft(teacher.decoder)
     outs, refs, dmae, f0r = [], [], [], []
     for r in held[:n_audio]:
         ids = r["ids"][None].to(DEV); L = torch.tensor([len(r["ids"])], device=DEV)
         pd, _, _, pasr = model(ids, L)
         pred_dur = torch.round(pd[0]).clamp(min=1).long(); aln = alignment(pred_dur)[None]
         pd2, pF0, pN, _ = model(ids, L, aln)
-        asr = pasr @ aln; s = ref[len(r["ids"]) - 3].to(DEV)
+        asr = pasr @ aln; s = ref[min(len(r["ids"]) - 3, STYLE_INDEX_MAX)].to(DEV)
         audio = teacher.decoder(asr, pF0, pN, s[:, :128]).squeeze().cpu()
         outs.append(audio); refs.append(r["audio"].float() / 32767)
         dmae.append((pred_dur.cpu() - r["pred_dur"]).abs().float().mean().item())

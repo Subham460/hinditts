@@ -5,22 +5,17 @@ warnings.filterwarnings("ignore")
 from kokoro import KPipeline
 from torch.nn.utils import remove_weight_norm
 from torch.nn.utils.parametrize import is_parametrized, remove_parametrizations
+from lang import LANG_CODE, VOICE, STYLE_INDEX_MAX, TEACHER_SENTS
 
-SENTS = [
- "The chickadee is a small songbird found across North America.",
- "In 1998, the company reported revenue of 4.2 billion dollars, up 17 percent from the year before.",
- "Would you rather read the article now, or should I save it for later?",
- "Despite its size, it survives harsh winters by caching thousands of seeds and remembering where each one is hidden.",
- "Dr. Smith arrived at 3 p.m. on Tuesday, carrying an umbrella, a laptop, and a very large sandwich.",
-]
+SENTS = TEACHER_SENTS
 
-def load_teacher(device="cpu", voice="af_heart", fuse=True):
-    pipe = KPipeline(lang_code="a", device=device, repo_id="hexgrad/Kokoro-82M")
+def load_teacher(device="cpu", voice=VOICE, fuse=True):
+    pipe = KPipeline(lang_code=LANG_CODE, device=device, repo_id="hexgrad/Kokoro-82M")
     model = pipe.model.eval()
     pack = pipe.load_voice(voice)
     items = []
     for s in SENTS:
-        ps, _ = pipe.g2p(s); items.append((ps, pack[len(ps) - 1]))
+        ps, _ = pipe.g2p(s); items.append((ps, pack[min(len(ps), STYLE_INDEX_MAX + 1) - 1]))
     if fuse:
         for _, m in model.named_modules():
             try: remove_weight_norm(m)

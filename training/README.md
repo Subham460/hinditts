@@ -1,5 +1,11 @@
 # Training Paradee
 
+> **Hindi fork:** the training scripts now read the language and voice from
+> [`scripts/lang.py`](scripts/lang.py) (default `h` / `hf_alpha`) and the corpus from
+> `data/hindi_sents_segments.json` (13,654 segments prepared from the 12,000 raw texts).
+> See [HINDI.md](HINDI.md) for the Hindi runbook. The rest of this
+> file describes the original English recipe, which is otherwise unchanged.
+
 This folder has the code that produced Paradee v1.0 and v1.1. Steps 1 to 4 are v1.0, and step 5
 adds the v1.1 head on top of them. Every run fits on one laptop: the original ran
 on a MacBook Pro with an Apple M4 Pro and 24 GB of memory, using PyTorch's MPS backend. Run every

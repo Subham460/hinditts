@@ -6,14 +6,15 @@ warnings.filterwarnings("ignore"); sys.path.insert(0, "scripts")
 from student import TextStudent, alignment
 from student_decoder import StudentDecoder
 from common import load_teacher, compare, cpu_source_stft
-ap = argparse.ArgumentParser(); ap.add_argument("text"); ap.add_argument("dec"); ap.add_argument("--device", default="mps"); ap.add_argument("--n", type=int, default=8)
+from lang import VOICE, STYLE_INDEX_MAX, DEVICE
+ap = argparse.ArgumentParser(); ap.add_argument("text"); ap.add_argument("dec"); ap.add_argument("--device", default=DEVICE); ap.add_argument("--n", type=int, default=8)
 ap.add_argument("--text-tag", default=""); ap.add_argument("--dec-tag", default="")
 A = ap.parse_args(); DEV = A.device
 held = torch.load(sorted(glob.glob("data/teacher/shard_*.pt"))[0])[:A.n]
 ts = TextStudent(A.text).to(DEV).eval(); ts.load_state_dict(torch.load(f"checkpoints/text_{A.text}{A.text_tag}/last.pt", map_location=DEV)["model"])
 from student_decoder import load_student_decoder
 ds = cpu_source_stft(load_student_decoder(A.dec, f"checkpoints/dec_{A.dec}{A.dec_tag}/last.pt", device=DEV))
-pipe, teacher, _ = load_teacher(device=DEV, fuse=False); ref = pipe.load_voice("af_heart"); cpu_source_stft(teacher.decoder)
+pipe, teacher, _ = load_teacher(device=DEV, fuse=False); ref = pipe.load_voice(VOICE); cpu_source_stft(teacher.decoder)
 out_dir = f"out/full_{A.text}{A.text_tag}_{A.dec}{A.dec_tag}"; os.makedirs(out_dir, exist_ok=True)
 @torch.no_grad()
 def text_outputs(r):
@@ -28,7 +29,7 @@ refs = [r["audio"].float() / 32767 for r in held]
 rows = {"teacher text + teacher decoder (floor)": [], "student text + teacher decoder": [], "teacher text + student decoder": [], "student text + student decoder (full)": []}
 with torch.no_grad():
     for i, r in enumerate(held):
-        s = ref[len(r["ids"]) - 3].to(DEV)[:, :128]
+        s = ref[min(len(r["ids"]) - 3, STYLE_INDEX_MAX)].to(DEV)[:, :128]
         ta, tf, tn = teacher_inputs(r); sa, sf_, sn = text_outputs(r)
         rows["teacher text + teacher decoder (floor)"].append(teacher.decoder(ta, tf, tn, s).squeeze().cpu())
         rows["student text + teacher decoder"].append(teacher.decoder(sa, sf_, sn, s).squeeze().cpu())

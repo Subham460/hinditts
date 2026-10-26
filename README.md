@@ -1,5 +1,10 @@
 # Paradee
 
+> **Hindi fork:** this working copy is being adapted to Hindi with Kokoro's `hf_alpha` voice and
+> a 12,000-sentence Hindi corpus. The training code, commands, and caveats are in
+> [`training/HINDI.md`](training/HINDI.md). The English release notes below still describe the
+> architecture.
+
 Paradee is a small English text-to-speech model. It has 7.88M parameters and is distilled from
 [Kokoro-82M](https://huggingface.co/hexgrad/Kokoro-82M), and it speaks one voice, Kokoro's `af_heart`.
 

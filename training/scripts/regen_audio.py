@@ -5,7 +5,8 @@ import sys, glob, os, time, torch
 sys.path.insert(0, "scripts")
 from common import load_teacher
 from student import alignment
-pipe, m, _ = load_teacher(device="cpu", fuse=False); ref = pipe.load_voice("af_heart")
+from lang import VOICE, STYLE_INDEX_MAX
+pipe, m, _ = load_teacher(device="cpu", fuse=False); ref = pipe.load_voice(VOICE)
 t0 = time.time(); secs = 0
 for path in sorted(glob.glob("data/teacher/shard_*.pt")):
     rows = torch.load(path)
@@ -13,7 +14,7 @@ for path in sorted(glob.glob("data/teacher/shard_*.pt")):
     with torch.no_grad():
         for i, r in enumerate(rows):
             torch.manual_seed(i); aln = alignment(r["pred_dur"]); Fr = aln.shape[1]
-            asr = r["t_en"].float()[None] @ aln; s = ref[len(r["ids"]) - 3]
+            asr = r["t_en"].float()[None] @ aln; s = ref[min(len(r["ids"]) - 3, STYLE_INDEX_MAX)]
             au = m.decoder(asr, r["F0"][None, :2*Fr], r["N"][None, :2*Fr], s[:, :128]).squeeze()
             r["audio_mps"] = r["audio"]; r["audio"] = (au.clamp(-1, 1) * 32767).short(); r["audio_cpu"] = True; secs += len(au) / 24000
     torch.save(rows, path + ".tmp"); os.replace(path + ".tmp", path)

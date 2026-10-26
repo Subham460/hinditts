@@ -7,6 +7,7 @@ from student import TextStudent, alignment
 from student_decoder import load_student_decoder
 from vhead import VDecoder, HV
 from phase_lock import lock
+from lang import WHISPER_LANG, WHISPER_MODEL
 ap = argparse.ArgumentParser(); ap.add_argument("ckpt"); ap.add_argument("n", type=int, nargs="?", default=8); ap.add_argument("--tag", default=""); ap.add_argument("--wer", action="store_true")
 ap.add_argument("--dim", type=int, default=160); ap.add_argument("--blocks", type=int, default=4); A = ap.parse_args()
 torch.set_num_threads(1); out = f"out/vh_ab{A.tag}"; os.makedirs(out, exist_ok=True)
@@ -42,7 +43,7 @@ for i, r in enumerate(held):
 from utmos import score
 print(f"{A.ckpt}, {A.n} held-out sentences, whole pipeline")
 if A.wer:
-    import whisper, jiwer, torchaudio; wm = whisper.load_model("base"); norm = lambda s: " ".join(re.sub(r"[^a-z0-9 ]+", " ", s.lower()).split())
+    import whisper, jiwer, torchaudio; wm = whisper.load_model(WHISPER_MODEL); norm = lambda s: " ".join(re.sub(r"[^\w ]+", " ", s.lower()).split())
 for n in names:
     us = [score(f"{out}/held_{i + 1}_{n}.wav") for i in range(A.n)]; u = np.mean(us)
     line = f"{n:8s} UTMOS {u:.3f} +-{1.96 * np.std(us, ddof=1) / np.sqrt(A.n):.3f}  harmonicity dB " + "  ".join(f"{lo // 1000}-{hi // 1000}k {np.mean([h[(lo, hi)] for h in H[n]]):5.2f}" for lo, hi in BANDS)
@@ -51,6 +52,6 @@ for n in names:
         hyp, ref = [], []
         for i, r in enumerate(held):
             x, _ = sf.read(f"{out}/held_{i + 1}_{n}.wav", dtype="float32"); x = torchaudio.functional.resample(torch.tensor(x), SR, 16000).numpy()
-            hyp.append(norm(wm.transcribe(x, language="en", fp16=False)["text"])); ref.append(norm(r["text"]))
+            hyp.append(norm(wm.transcribe(x, language=WHISPER_LANG, fp16=False)["text"])); ref.append(norm(r["text"]))
         line += f"  WER {jiwer.wer(ref, hyp) * 100:.1f}%"
     print(line, flush=True)

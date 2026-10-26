@@ -7,6 +7,8 @@ import torch, torch.nn.functional as F, soundfile as sf, torchaudio
 sys.path.insert(0, "scripts")
 from vhead import VDecoder
 from student import alignment
+from lang import DEVICE
+from dataio import load_shard
 ap = argparse.ArgumentParser(); ap.add_argument("--steps", type=int, default=5000)
 ap.add_argument("--bs", type=int, default=16); ap.add_argument("--lr", type=float, default=2e-4); ap.add_argument("--seg", type=int, default=64)
 ap.add_argument("--gan", action="store_true"); ap.add_argument("--gan-weight", type=float, default=1.0); ap.add_argument("--fm-weight", type=float, default=2.0); ap.add_argument("--mel-weight", type=float, default=45.0)
@@ -18,13 +20,13 @@ ap.add_argument("--harm-weight", type=float, default=0.0, help="match the teache
 ap.add_argument("--mod-weight", type=float, default=0.0, help="match how each upper band's loudness pulses with the pitch (depth and timing, at 1x and 2x the pitch) in 50 ms windows; v2 head only")
 ap.add_argument("--head", default="v1"); ap.add_argument("--dim", type=int, default=160); ap.add_argument("--blocks", type=int, default=4)
 ap.add_argument("--utmos", action="store_true"); ap.add_argument("--eval-every", type=int, default=2500); ap.add_argument("--eval-only", action="store_true")
-ap.add_argument("--device", default="mps"); ap.add_argument("--shards", type=int, default=8); ap.add_argument("--tag", default="")
+ap.add_argument("--device", default=DEVICE); ap.add_argument("--shards", type=int, default=8); ap.add_argument("--tag", default="")
 A = ap.parse_args(); DEV = A.device; RUN = f"checkpoints/vh{A.tag}"; os.makedirs(RUN, exist_ok=True)
 
 def load_rows():
     shards = sorted(glob.glob("data/teacher/shard_*.pt"))[:A.shards]
     def load(sh):
-        rows = torch.load(sh)
+        rows = load_shard(sh)
         for r in rows:
             for k in ("audio_mps", "audio_cpu", "d", "dur", "ids"): r.pop(k, None)
         return rows

@@ -3,6 +3,7 @@ __pycache__/
 .venv/
 training/.venv/
 training/data/teacher/
+training/data/.hindi_pages/
 training/checkpoints/
 training/models/
 training/out/
