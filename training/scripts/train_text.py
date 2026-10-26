@@ -21,15 +21,23 @@ A = ap.parse_args(); DEV = A.device
 RUN = f"checkpoints/text_{A.preset}{A.tag}"; os.makedirs(RUN, exist_ok=True)
 
 def load_rows():
-    """Held-out = first 200 rows of shard 0 (fixed forever); train = everything else that exists."""
+    """Held-out = val+test when the cache has splits; train = the split's train rows.
+
+    Older caches without a split field keep the original first-200-of-shard-0 convention.
+    """
     shards = sorted(glob.glob("data/teacher/shard_*.pt"))[:A.shards]
     def lean(r, train):  # drop what training never reads; keeps RAM at ~1/4 of the shard size
         r.pop("audio_mps", None); r.pop("d", None)
         if train and not A.through_decoder: r.pop("audio", None)
         return r
     rows0 = load_shard(shards[0])
-    held = [lean(r, False) for r in rows0[:200]]
-    train = [lean(r, True) for r in rows0[200:]] + [lean(r, True) for sh in shards[1:] for r in load_shard(sh)]
+    rest = [r for sh in shards[1:] for r in load_shard(sh)]
+    if any("split" in r for r in rows0):
+        held = [lean(r, False) for r in rows0 + rest if r.get("split") in ("val", "test")]
+        train = [lean(r, True) for r in rows0 + rest if r.get("split") == "train"]
+    else:
+        held = [lean(r, False) for r in rows0[:200]]
+        train = [lean(r, True) for r in rows0[200:]] + [lean(r, True) for r in rest]
     return held, train, len(shards)
 held, train, nsh = load_rows()
 print(f"{len(train)} train / {len(held)} held-out sentences from {nsh} shards", flush=True)

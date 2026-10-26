@@ -37,10 +37,19 @@ def load_rows():
         return r
     def load(sh):
         rows = load_shard(sh)
-        for i, r in enumerate(rows): r["seed"] = i
+        # New caches store the seed used for Kokoro's stochastic source; legacy shards
+        # used the row index inside the shard (the regen_audio.py convention).
+        for i, r in enumerate(rows): r["seed"] = int(r.get("audio_seed", i))
         return [lean(r) for r in rows]
     rows0 = load(shards[0])
-    return rows0[:200], rows0[200:] + [r for sh in shards[1:] for r in load(sh)], len(shards)
+    rest = [r for sh in shards[1:] for r in load(sh)]
+    if any("split" in r for r in rows0):
+        held = [r for r in rows0 + rest if r.get("split") in ("val", "test")]
+        train = [r for r in rows0 + rest if r.get("split") == "train"]
+    else:
+        held = rows0[:200]
+        train = rows0[200:] + rest
+    return held, train, len(shards)
 held, train, nsh = load_rows(); print(f"{len(train)} train / {len(held)} held-out from {nsh} shards", flush=True)
 
 def full(r):
@@ -59,7 +68,7 @@ def collate(rows, seg):
     x = [segment(r, seg) for r in rows]
     return [torch.stack([t[i] for t in x]).to(DEV) for i in range(6)]
 def matched_source(r, a, seg):
-    """Teacher's harmonic source for this sentence (same seed as regen_audio.py), cropped to the segment."""
+    """Teacher's harmonic source for this sentence (the seed stored with the row)."""
     F0 = r["F0"][None]
     torch.manual_seed(r["seed"])
     with torch.no_grad(): har = SRC_M(SRC_UP(F0[:, None]).transpose(1, 2))[0]   # [1, samples, 1]

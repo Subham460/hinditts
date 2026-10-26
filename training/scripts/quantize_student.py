@@ -6,12 +6,13 @@ warnings.filterwarnings("ignore"); sys.path.insert(0, "scripts")
 from student import TextStudent, alignment
 from student_decoder import StudentDecoder
 from common import fq, compare
+from dataio import load_held
 from torch.nn.utils import remove_weight_norm
 from torch.nn.utils.parametrize import is_parametrized, remove_parametrizations
 ap = argparse.ArgumentParser(); ap.add_argument("text"); ap.add_argument("dec"); ap.add_argument("--text-tag", default=""); ap.add_argument("--dec-tag", default="")
 ap.add_argument("--bits", type=int, default=8); ap.add_argument("--dec-bits", type=int, default=8); ap.add_argument("--n", type=int, default=8)
 A = ap.parse_args()
-held = torch.load(sorted(glob.glob("data/teacher/shard_*.pt"))[0])[:A.n]
+held = load_held(A.n)
 ts = TextStudent(A.text).eval(); ts.load_state_dict(torch.load(f"checkpoints/text_{A.text}{A.text_tag}/last.pt", map_location="cpu")["model"])
 ds = StudentDecoder(A.dec).eval(); ds.load_state_dict(torch.load(f"checkpoints/dec_{A.dec}{A.dec_tag}/last.pt", map_location="cpu")["model"])
 for m in list(ts.modules()) + list(ds.modules()):

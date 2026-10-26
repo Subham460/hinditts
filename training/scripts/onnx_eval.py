@@ -3,8 +3,9 @@ speed on one onnxruntime thread. usage: onnx_eval.py N_SENT NAME=PATH.onnx [NAME
 import sys, glob, os, re, time, warnings, torch, numpy as np, soundfile as sf, onnxruntime as ort; warnings.filterwarnings("ignore"); sys.path.insert(0, "scripts")
 import whisper, jiwer, torchaudio
 from utmos import score
+from dataio import load_held
 from lang import WHISPER_LANG, WHISPER_MODEL
-N = int(sys.argv[1]); SR = 24000; held = torch.load(sorted(glob.glob("data/teacher/shard_*.pt"))[0])[:N]
+N = int(sys.argv[1]); SR = 24000; held = load_held(N)
 wm = whisper.load_model(WHISPER_MODEL); norm = lambda s: " ".join(re.sub(r"[^\w ]+", " ", s.lower()).split())
 for arg in sys.argv[2:]:
     name, path = arg.split("=", 1); out = f"out/onnx_eval_{name}"; os.makedirs(out, exist_ok=True)

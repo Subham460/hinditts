@@ -7,6 +7,7 @@ writes out/phase_lock/ or out/phase_lock_full/"""
 import sys, glob, os, warnings, torch, torch.nn.functional as F, soundfile as sf; warnings.filterwarnings("ignore"); sys.path.insert(0, "scripts")
 from student import alignment
 from student_decoder import load_student_decoder
+from dataio import load_held
 n, hop, SR = 1024, 256, 24000; W = torch.hann_window(n); FR = torch.arange(n // 2 + 1) * SR / n
 BAND = ((FR >= 2000) & (FR < 8000))[:, None]
 
@@ -34,7 +35,7 @@ def lock(s, src, f0, L):
 if __name__ == "__main__":
     args = [a for a in sys.argv[1:] if not a.startswith("--")]; FULL = "--full" in sys.argv
     ck = args[0] if args else "checkpoints/dec_A_gan3/last.pt"; NS = int(args[1]) if len(args) > 1 else 2
-    held = torch.load(sorted(glob.glob("data/teacher/shard_*.pt"))[0])[:NS]
+    held = load_held(NS)
     ds = load_student_decoder("A", ck); cap = {}
     ds.generator.m_source.register_forward_hook(lambda m, i, o: cap.__setitem__("src", o[0].squeeze()))
     if FULL:

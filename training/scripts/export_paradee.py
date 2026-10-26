@@ -8,6 +8,7 @@ import sys, glob, os, time, argparse, warnings, torch, numpy as np, torch.nn as 
 warnings.filterwarnings("ignore"); sys.path.insert(0, "scripts")
 from student import TextStudent
 from student_decoder import load_student_decoder
+from dataio import load_held
 from torch.nn.utils import remove_weight_norm
 from torch.nn.utils.parametrize import is_parametrized, remove_parametrizations
 import phase_lock
@@ -116,7 +117,7 @@ def load(disable_complex=True):
     if disable_complex: ds.generator.stft = ConvSTFT(ds.generator.stft.filter_length, ds.generator.stft.hop_length)
     return Paradee(ts, ds, A.L).eval()
 
-held = torch.load(sorted(glob.glob("data/teacher/shard_*.pt"))[0])[:4]
+held = load_held(4)
 
 # 1. the rewritten filter matches phase_lock.lock() on the same student waveform and source
 pm = load(disable_complex=False)

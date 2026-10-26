@@ -10,9 +10,24 @@ LANG_CODE = "h"                 # Kokoro language code: h = Hindi, a = American 
 VOICE = "hf_alpha"              # the voice in subhamgiri9748/kokoros-distill; hf_beta, hm_omega, hm_psi also exist
 G2P_LANG = "hi"                 # espeak-ng code used by Kokoro and by the corpus checks (Kokoro maps h -> hi)
 RAW_SENTS_PATH = "data/hindi_sents.json"
-SENTS_PATH = "data/hindi_sents_segments.json"   # prepare_hindi.py splits the raw texts to <=400 phonemes
-MAX_PHONEMES = 400              # gen_teacher.py skips longer text; Paradee's text side holds 512 tokens
+SENTS_PATH = "data/hindi_sents_segments.json"   # legacy text-only list; prepare_hindi.py still writes it
+MANIFEST_PATH = "data/hindi_segments.jsonl"     # canonical, id-preserving segment manifest
+TEACHER_DIR = "data/teacher"                    # canonical teacher-cache directory (shard_XXXX.pt)
+MAX_PHONEMES = 400              # teacher-cache rows; Paradee's text side holds 512 tokens
 STYLE_INDEX_MAX = 509           # Kokoro voice packs have 510 entries (phoneme counts 1..510)
+SAMPLE_RATE = 24000             # Kokoro output sample rate
+FRAME_HOP = 300                 # Kokoro mel hop; 600 waveform samples per pred_dur frame
+SAMPLES_PER_FRAME = 600         # 24000 / 40; one pred_dur frame lasts 25 ms
+FEATURE_DIM = 512               # teacher asr / text-encoder feature width
+PRED_FEATURE_DIM = 640          # teacher predictor text features: 512 hidden + 128 predictor style
+STYLE_DIM = 256                 # Kokoro voice-pack entry width
+N_TOKEN = 178                   # Kokoro vocabulary size
+TEACHER_REPO = "hexgrad/Kokoro-82M"
+SOURCE_DATASET = "subhamgiri9748/kokoros-distill"
+SCHEMA_VERSION = 1
+SPLIT_SEED = 0
+VAL_BPS = 100                   # 1% of parent rows by hash -> validation
+TEST_BPS = 100                  # 1% of parent rows by hash -> test
 WHISPER_LANG = "hi"             # language for the WER checks
 WHISPER_MODEL = "base"          # large-v3 gives a much fairer Hindi WER if you have the memory
 

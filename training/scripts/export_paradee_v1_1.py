@@ -6,6 +6,7 @@ usage: export_paradee_v1_1.py DEC_CKPT [--text checkpoints/text_s+mlp/last.pt] [
 import sys, glob, os, time, argparse, warnings, torch, numpy as np, torch.nn as nn, torch.nn.functional as F
 warnings.filterwarnings("ignore"); sys.path.insert(0, "scripts")
 from student import TextStudent, alignment
+from dataio import load_held
 from vhead import VDecoder, SR, FHOP
 from torch.nn.utils import remove_weight_norm
 from torch.nn.utils.parametrize import is_parametrized, remove_parametrizations
@@ -96,7 +97,7 @@ class Paradee2(nn.Module):
 
 ts = TextStudent("s+mlp").eval(); ts.load_state_dict(torch.load(A.text, map_location="cpu")["model"])
 vd = VDecoder(head="v2").eval(); vd.load_ckpt(A.dec); strip(ts); strip(vd); m = Paradee2(ts, vd).eval()
-held = torch.load(sorted(glob.glob("data/teacher/shard_*.pt"))[0])[:4]
+held = load_held(4)
 
 # 1. the rewritten head matches the torch head on the same inputs and noise
 with torch.no_grad():

@@ -9,8 +9,8 @@ Everything language-specific lives in [`scripts/lang.py`](scripts/lang.py):
 ```python
 LANG_CODE = "h"          # Kokoro language code
 VOICE = "hf_alpha"       # hf_beta, hm_omega, hm_psi also exist
-RAW_SENTS_PATH = "data/hindi_sents.json"
-SENTS_PATH = "data/hindi_sents_segments.json"
+MANIFEST_PATH = "data/hindi_segments.jsonl"   # canonical segment manifest
+TEACHER_DIR = "data/teacher"                  # canonical cache (shard_XXXX.pt)
 MAX_PHONEMES = 400
 WHISPER_LANG = "hi"
 ```
@@ -23,65 +23,107 @@ a corpus of Kokoro-82M `hf_alpha` audio at 24 kHz (source text: `shivam/hindi_pi
 Every row uses `hf_alpha`; the released audio is 51.2 hours, about twice the English
 23.9-hour Paradee corpus. The loader is
 [`scripts/fetch_hindi_sents.py`](scripts/fetch_hindi_sents.py); it caches pages under
-`data/.hindi_pages/`, works around the dataset server's rate limit, and shuffles with seed 0.
+`data/.hindi_pages/`, works around the dataset server's rate limit, and writes both the
+legacy text list and an id-preserving `data/hindi_sents.jsonl`.
 
 Paradee trains on Kokoro's **intermediates** (durations, F0, N, `t_en`, `pred_dur`), not just
-the released waveform, so the teacher has to be run locally. `gen_teacher.py` skips text over
-400 phonemes, which is 1,640 of the 12,000 raw rows (13.7%) and includes the 698 rows (5.8%)
-that are also over the model's 510-token limit. [`scripts/prepare_hindi.py`](scripts/prepare_hindi.py)
-therefore rewrites the corpus into `data/hindi_sents_segments.json`: sentences that fit are
-unchanged, and longer ones become `ceil(total / 400)` roughly equal word-boundary pieces.
-That gives **13,654 unique segments** (median 232 phonemes, p95 358, max 400) from the 12,000
-rows, with no row mixed into another and no segment over the limit. Only two phonemes in the
-whole corpus fall outside Kokoro's vocabulary (a rare combining mark), so teacher generation
-drops almost nothing.
+the released waveform, so the teacher has to be run once. The canonical training input is
+now the segment manifest written by [`scripts/prepare_hindi.py`](scripts/prepare_hindi.py):
 
-The first 200 segments are held out by every training script. Because segments are generated
-in the shuffled raw order, the split is still fixed and disjoint.
-
-Check the result before spending hours on teacher generation:
-
-```bash
-uv run python scripts/fetch_hindi_sents.py   # only needed once; resumes from cache
-uv run python scripts/prepare_hindi.py
-uv run python scripts/check_hindi.py         # duplicates, lengths, dropped characters
+```text
+data/hindi_segments.jsonl     one line per segment: id, parent_id, source_row_index,
+                              segment_index, n_segments, text, phonemes, text_hash,
+                              split (train/val/test)
 ```
 
-The released dataset audio is useful as a sanity check: `gen_teacher.py` should produce the
-same voice. Check the source dataset's licence before redistributing the text; Kokoro's
-weights are Apache 2.0.
+On the 12,000-row corpus it produces **13,655 segments**: sentences that fit 400 phonemes
+are unchanged, longer ones become `ceil(total / 400)` roughly equal word-boundary pieces.
+There are 13,654 unique segment texts; the one duplicate is deliberately kept with a unique
+id so that no source row loses a segment. Median length is 232 phonemes, p95 358, max 400.
+Only two phonemes in the whole corpus (`̩`) fall outside Kokoro's 178-token vocabulary, so
+teacher generation drops almost nothing.
+
+The split is assigned per **parent** row by a stable hash (`sha256(seed:parent_id)`), so all
+segments of one source sentence stay together. At the default 1%/1% it gives about 13,400
+train / 140 val / 115 test segments. The old "first 200 rows of shard 0" convention is still
+used automatically for legacy shards that have no `split` field.
+
+Build the manifest and check it before spending hours on teacher generation:
+
+```bash
+uv run python scripts/fetch_hindi_sents.py   # only if data/hindi_sents.jsonl is absent
+uv run python scripts/prepare_hindi.py --in data/hindi_sents.jsonl
+uv run python scripts/check_hindi.py --in data/hindi_segments.jsonl
+```
+
+The released dataset audio is useful as a sanity check: the regenerated teacher cache should
+use the same voice. Check the source dataset's licence before redistributing the text;
+Kokoro's weights are Apache 2.0. The full schema, generation commands, and Kaggle runbook are
+in [DATASET.md](DATASET.md).
+
+## Build the teacher cache
+
+Run Kokoro **once** and store the waveform plus every intermediate a student may need. The
+one-shot Kaggle notebook is
+[`kaggle_generate_teacher_cache.ipynb`](kaggle_generate_teacher_cache.ipynb): it installs the
+dependencies, finds or downloads the source, prepares the manifest, runs a smoke test, uses
+two T4s for disjoint shard ranges, validates, and publishes a Kaggle Dataset.
+
+Locally (or in any GPU session):
+
+```bash
+uv sync
+
+# two GPUs, disjoint shards; rerun either command to resume
+CUDA_VISIBLE_DEVICES=0 uv run python scripts/gen_teacher_dataset.py \
+  --manifest data/hindi_segments.jsonl --out data/teacher --start 0 --stride 2
+CUDA_VISIBLE_DEVICES=1 uv run python scripts/gen_teacher_dataset.py \
+  --manifest data/hindi_segments.jsonl --out data/teacher --start 1 --stride 2
+
+# finalize: checks every row and writes meta/splits/schema/README
+uv run python scripts/validate_teacher_dataset.py \
+  --root data/teacher --manifest data/hindi_segments.jsonl
+```
+
+`data/teacher/` is 15–16 GB (51.2 h int16 audio plus float16 `t_en`/`d`). Mount it read-only
+on Kaggle and symlink it to `data/teacher`; do **not** run `regen_audio.py` against the mount.
+`gen_teacher.py` and `regen_audio.py` are the legacy generator path and are not used for the
+reusable cache.
 
 ## Train
 
-Run from this folder, with `uv sync` done once. The device is auto-detected (MPS, CUDA, then
-CPU); override it with `DEVICE=cpu` for `gen_teacher.py` or `--device` for the trainers.
+Run from this folder. Build or mount the cache first (above); the trainers read
+`data/teacher/shard_*.pt` and use the dataset's `split` field for held-out data.
 
 ```bash
 cd training
-uv sync
 
-# 1. teacher corpus: 13,654 segments (28 shards of 500)
-uv run python scripts/gen_teacher.py
-uv run python scripts/regen_audio.py
-
-# 2. text side (4.23M)
+# text side (4.23M)
 uv run python scripts/train_text.py s+mlp --steps 8000
 
-# 3. decoder, v1.0 generator
+# decoder, v1.0 generator
 uv run python scripts/train_decoder.py A
 uv run python scripts/train_decoder.py A --gan --mel-weight 10 \
   --init-from checkpoints/dec_A/last.pt --steps 5000 --bs 8 --tag _gan10
 uv run python scripts/train_decoder.py A --gan --mel-weight 3 \
   --init-from checkpoints/dec_A_gan10/last.pt --steps 5000 --bs 8 --shards 8 --tag _gan3
 
-# 4. v1.1 frame-rate head
+# v1.1 frame-rate head
 X=(--head v2 --fine-stft --harm-weight 2 --mod-weight 5 --shards 999 --utmos)
 uv run python scripts/train_vhead.py $X --steps 40000 --eval-every 10000 --tag 2_full
 uv run python scripts/train_vhead.py $X --gan --mel-weight 3 --bs 8 \
   --init-from checkpoints/vh2_full/last.pt --steps 15000 --tag 2_fullgan
 
-# 5. one ONNX graph, fp32 + int8
+# one ONNX graph, fp32 + int8
 uv run python scripts/export_paradee_v1_1.py checkpoints/vh2_fullgan/last.pt
+```
+
+In a Kaggle training notebook, use the system environment (it already has torch/torchaudio)
+and mount the published dataset:
+
+```bash
+pip install -q --no-cache-dir kokoro==0.9.4 "misaki[en]==0.9.4"
+rm -rf data/teacher && ln -s /kaggle/input/kokoro-hindi-teacher data/teacher
 ```
 
 All trainers resume from `checkpoints/.../last.pt`. Start with a few thousand steps on a

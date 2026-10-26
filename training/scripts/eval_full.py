@@ -6,11 +6,12 @@ warnings.filterwarnings("ignore"); sys.path.insert(0, "scripts")
 from student import TextStudent, alignment
 from student_decoder import StudentDecoder
 from common import load_teacher, compare, cpu_source_stft
+from dataio import load_held
 from lang import VOICE, STYLE_INDEX_MAX, DEVICE
 ap = argparse.ArgumentParser(); ap.add_argument("text"); ap.add_argument("dec"); ap.add_argument("--device", default=DEVICE); ap.add_argument("--n", type=int, default=8)
 ap.add_argument("--text-tag", default=""); ap.add_argument("--dec-tag", default="")
 A = ap.parse_args(); DEV = A.device
-held = torch.load(sorted(glob.glob("data/teacher/shard_*.pt"))[0])[:A.n]
+held = load_held(A.n)
 ts = TextStudent(A.text).to(DEV).eval(); ts.load_state_dict(torch.load(f"checkpoints/text_{A.text}{A.text_tag}/last.pt", map_location=DEV)["model"])
 from student_decoder import load_student_decoder
 ds = cpu_source_stft(load_student_decoder(A.dec, f"checkpoints/dec_{A.dec}{A.dec_tag}/last.pt", device=DEV))

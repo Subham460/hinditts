@@ -30,7 +30,15 @@ def load_rows():
         for r in rows:
             for k in ("audio_mps", "audio_cpu", "d", "dur", "ids"): r.pop(k, None)
         return rows
-    rows0 = load(shards[0]); return rows0[:200], rows0[200:] + [r for sh in shards[1:] for r in load(sh)]
+    rows0 = load(shards[0])
+    rest = [r for sh in shards[1:] for r in load(sh)]
+    if any("split" in r for r in rows0):
+        held = [r for r in rows0 + rest if r.get("split") in ("val", "test")]
+        train = [r for r in rows0 + rest if r.get("split") == "train"]
+    else:
+        held = rows0[:200]
+        train = rows0[200:] + rest
+    return held, train
 held, train = load_rows(); print(f"{len(train)} train / {len(held)} held-out", flush=True)
 def full(r):
     aln = alignment(r["pred_dur"]); asr = r["t_en"].float() @ aln; Fr = aln.shape[1]

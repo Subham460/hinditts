@@ -7,11 +7,12 @@ from student import TextStudent, alignment
 from student_decoder import load_student_decoder
 from vhead import VDecoder, HV
 from phase_lock import lock
+from dataio import load_held
 from lang import WHISPER_LANG, WHISPER_MODEL
 ap = argparse.ArgumentParser(); ap.add_argument("ckpt"); ap.add_argument("n", type=int, nargs="?", default=8); ap.add_argument("--tag", default=""); ap.add_argument("--wer", action="store_true")
 ap.add_argument("--dim", type=int, default=160); ap.add_argument("--blocks", type=int, default=4); A = ap.parse_args()
 torch.set_num_threads(1); out = f"out/vh_ab{A.tag}"; os.makedirs(out, exist_ok=True)
-held = torch.load(sorted(glob.glob("data/teacher/shard_*.pt"))[0])[:A.n]
+held = load_held(A.n)
 ts = TextStudent("s+mlp").eval(); ts.load_state_dict(torch.load("checkpoints/text_s+mlp/last.pt", map_location="cpu")["model"])
 da = load_student_decoder("A", "checkpoints/dec_A_gan3/last.pt"); cap = {}
 da.generator.m_source.register_forward_hook(lambda m, i, o: cap.__setitem__("src", o[0].squeeze()))

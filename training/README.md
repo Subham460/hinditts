@@ -1,10 +1,12 @@
 # Training Paradee
 
-> **Hindi fork:** the training scripts now read the language and voice from
-> [`scripts/lang.py`](scripts/lang.py) (default `h` / `hf_alpha`) and the corpus from
-> `data/hindi_sents_segments.json` (13,654 segments prepared from the 12,000 raw texts).
-> See [HINDI.md](HINDI.md) for the Hindi runbook. The rest of this
-> file describes the original English recipe, which is otherwise unchanged.
+> **Hindi fork:** the training scripts read the language and voice from
+> [`scripts/lang.py`](scripts/lang.py) (default `h` / `hf_alpha`) and the teacher cache from
+> `data/teacher/shard_*.pt` (13,655 segments from the 12,000 raw texts). The cache is built
+> once with [`scripts/gen_teacher_dataset.py`](scripts/gen_teacher_dataset.py) — see
+> [HINDI.md](HINDI.md), [DATASET.md](DATASET.md), and the one-shot
+> [Kaggle notebook](kaggle_generate_teacher_cache.ipynb). The rest of this file describes the
+> original English recipe, which is otherwise unchanged.
 
 This folder has the code that produced Paradee v1.0 and v1.1. Steps 1 to 4 are v1.0, and step 5
 adds the v1.1 head on top of them. Every run fits on one laptop: the original ran

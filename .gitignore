@@ -3,6 +3,10 @@ __pycache__/
 .venv/
 training/.venv/
 training/data/teacher/
+training/data/teacher_bundle/
+training/data/hindi_segments.jsonl
+training/data/hindi_segments_report.json
+training/data/hindi_sents.jsonl
 training/data/.hindi_pages/
 training/checkpoints/
 training/models/
